@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#080810"/>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <!-- Gear shape -->
+  <g transform="translate(256,256)">
+    <circle r="72" fill="url(#g)"/>
+    <circle r="40" fill="#080810"/>
+    <!-- Gear teeth -->
+    <rect x="-20" y="-128" width="40" height="44" rx="8" fill="url(#g)"/>
+    <rect x="-20" y="84" width="40" height="44" rx="8" fill="url(#g)"/>
+    <rect x="-128" y="-20" width="44" height="40" rx="8" fill="url(#g)"/>
+    <rect x="84" y="-20" width="44" height="40" rx="8" fill="url(#g)"/>
+    <rect x="-100" y="-100" width="40" height="40" rx="8" fill="url(#g)" transform="rotate(45)"/>
+    <rect x="-100" y="60" width="40" height="40" rx="8" fill="url(#g)" transform="rotate(45)"/>
+    <rect x="60" y="-100" width="40" height="40" rx="8" fill="url(#g)" transform="rotate(45)"/>
+    <rect x="60" y="60" width="40" height="40" rx="8" fill="url(#g)" transform="rotate(45)"/>
+  </g>
+</svg>

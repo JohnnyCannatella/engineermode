@@ -1,0 +1,19 @@
+{
+  "name": "Engineer Mode",
+  "short_name": "EngineerMode",
+  "description": "Gamified engineering learning — build your engineering intuition in 5 minutes a day",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080810",
+  "theme_color": "#7c3aed",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
