@@ -4,7 +4,7 @@ import { getProfilePreferences, recommendLearningPath } from '@/lib/profile-pref
 import { createClient } from '@/lib/supabase/server'
 import { xpProgress } from '@/lib/utils'
 import BottomNav from '@/components/ui/BottomNav'
-import type { LearningArea, UserMissionProgress } from '@/types'
+import type { LearningArea, Topic, UserMissionProgress, UserTopicProgress } from '@/types'
 
 const STAGE_LABELS = {
   foundation: 'Fondamenta',
@@ -27,6 +27,10 @@ export default async function DashboardPage() {
     { data: recentAchievements },
     { data: dueReviews },
     { data: masteryRows },
+    { data: topics },
+    { data: userTopicRows },
+    { data: missionTopicRows },
+    { data: topicPrerequisiteRows },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase.from('learning_areas').select('*').order('order_index'),
@@ -43,6 +47,20 @@ export default async function DashboardPage() {
       .from('user_mission_mastery')
       .select('mission_id,mastery_level')
       .eq('user_id', user.id),
+    supabase.from('topics').select('slug,title,summary,difficulty_level,estimated_minutes,overview,key_takeaways,created_at').order('title'),
+    supabase
+      .from('user_topic_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('mission_topics')
+      .select('mission_id,topic_slug,sort_order,is_primary')
+      .order('sort_order'),
+    supabase
+      .from('topic_prerequisites')
+      .select('topic_slug,prerequisite_topic_slug,sort_order')
+      .order('sort_order'),
   ])
 
   if (!profile) redirect('/auth')
@@ -103,6 +121,116 @@ export default async function DashboardPage() {
   }
 
   const orderedAreas = (areas || []) as LearningArea[]
+  const topicProgressMap = new Map<string, UserTopicProgress>((userTopicRows || []).map((row) => [row.topic_slug, row as UserTopicProgress]))
+  const typedTopics = (topics || []) as Topic[]
+  const topicsByArea = new Map<string, number>()
+  const understoodTopicsByArea = new Map<string, number>()
+  const topicAreaByPathSlug = new Map((paths || []).map((path) => [path.slug, path.area_slug ?? 'systems-thinking']))
+  const pathSlugByPathId = new Map((paths || []).map((path) => [path.id, path.slug]))
+  const missionPathSlugById = new Map((missions || []).map((mission) => [mission.id, pathSlugByPathId.get(mission.path_id) ?? null]))
+  for (const row of missionTopicRows || []) {
+    const pathSlug = missionPathSlugById.get(row.mission_id)
+    if (!pathSlug) continue
+    const areaSlug = topicAreaByPathSlug.get(pathSlug) ?? 'systems-thinking'
+    const key = `${areaSlug}:${row.topic_slug}`
+    if (topicsByArea.has(key)) continue
+    topicsByArea.set(key, 1)
+    if (topicProgressMap.get(row.topic_slug)?.status === 'understood') {
+      understoodTopicsByArea.set(areaSlug, (understoodTopicsByArea.get(areaSlug) ?? 0) + 1)
+    }
+  }
+  const topicMap = new Map<string, Topic>(typedTopics.map((topic) => [topic.slug, topic]))
+  const topicsToStart = typedTopics
+    .filter((topic) => !topicProgressMap.has(topic.slug))
+    .slice(0, 3)
+  const topicsStudying = typedTopics
+    .filter((topic) => topicProgressMap.get(topic.slug)?.status === 'studying')
+    .slice(0, 3)
+  const recentlyUnderstood = typedTopics
+    .filter((topic) => topicProgressMap.get(topic.slug)?.status === 'understood')
+    .sort((a, b) => {
+      const aUpdated = topicProgressMap.get(a.slug)?.updated_at ?? ''
+      const bUpdated = topicProgressMap.get(b.slug)?.updated_at ?? ''
+      return bUpdated.localeCompare(aUpdated)
+    })
+    .slice(0, 3)
+  const understoodTopicCount = (userTopicRows || []).filter((row) => row.status === 'understood').length
+  const studyingTopicCount = (userTopicRows || []).filter((row) => row.status === 'studying').length
+  const studiedTopicCount = (userTopicRows || []).filter((row) => row.status !== 'not_started').length
+  const topicCoveragePct = typedTopics.length > 0 ? Math.round((studiedTopicCount / typedTopics.length) * 100) : 0
+  const bestAreaCoverage = orderedAreas
+    .map((area) => {
+      const total = Array.from(topicsByArea.keys()).filter((key) => key.startsWith(`${area.slug}:`)).length
+      const understood = understoodTopicsByArea.get(area.slug) ?? 0
+      return { area, total, understood, pct: total > 0 ? Math.round((understood / total) * 100) : 0 }
+    })
+    .filter((item) => item.total > 0)
+    .sort((a, b) => b.pct - a.pct)[0]
+  const studyingTopicAction = (userTopicRows || [])
+    .find((row) => row.status === 'studying' && topicMap.has(row.topic_slug))
+  const missionTopicsForNextMission = nextMission
+    ? (missionTopicRows || [])
+        .filter((row) => row.mission_id === nextMission.id)
+        .sort((a, b) => {
+          if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1
+          return a.sort_order - b.sort_order
+        })
+    : []
+  const prerequisitesByTopic = new Map<string, string[]>()
+  for (const row of topicPrerequisiteRows || []) {
+    const existing = prerequisitesByTopic.get(row.topic_slug) ?? []
+    existing.push(row.prerequisite_topic_slug)
+    prerequisitesByTopic.set(row.topic_slug, existing)
+  }
+  const unmetPrerequisiteTopic = missionTopicsForNextMission
+    .flatMap((row) => prerequisitesByTopic.get(row.topic_slug) ?? [])
+    .map((slug) => topicMap.get(slug))
+    .find((topic) => topic && topicProgressMap.get(topic.slug)?.status !== 'understood')
+  const missionLinkedTopic = missionTopicsForNextMission
+    .map((row) => topicMap.get(row.topic_slug))
+    .find((topic) => topic && topicProgressMap.get(topic.slug)?.status !== 'understood')
+  const nextBestAction =
+    studyingTopicAction && topicMap.get(studyingTopicAction.topic_slug)
+      ? {
+          kind: 'topic' as const,
+          href: `/topic/${studyingTopicAction.topic_slug}`,
+          title: topicMap.get(studyingTopicAction.topic_slug)!.title,
+          description: 'Hai già un topic attivo. Chiudi il ragionamento prima di aprire un altro fronte.',
+          badge: 'Riprendi studio',
+          meta: [`⏱ ${topicMap.get(studyingTopicAction.topic_slug)!.estimated_minutes} min`, '🧠 In studio'],
+          icon: '◈',
+        }
+      : unmetPrerequisiteTopic
+      ? {
+          kind: 'topic' as const,
+          href: `/topic/${unmetPrerequisiteTopic.slug}`,
+          title: unmetPrerequisiteTopic.title,
+          description: 'Prima della prossima missione conviene chiudere questo prerequisito teorico.',
+          badge: 'Studia prima',
+          meta: [`⏱ ${unmetPrerequisiteTopic.estimated_minutes} min`, '📚 Prerequisito'],
+          icon: '◌',
+        }
+      : missionLinkedTopic
+      ? {
+          kind: 'topic' as const,
+          href: `/topic/${missionLinkedTopic.slug}`,
+          title: missionLinkedTopic.title,
+          description: 'Questo topic ti dà la teoria utile per affrontare meglio la prossima missione.',
+          badge: 'Approfondisci',
+          meta: [`⏱ ${missionLinkedTopic.estimated_minutes} min`, '🧠 Topic collegato'],
+          icon: '◎',
+        }
+      : nextMission
+      ? {
+          kind: 'mission' as const,
+          href: `/mission/${nextMission.id}`,
+          title: nextMission.title,
+          description: nextMission.description ?? 'Prossima missione consigliata.',
+          badge: 'Missione',
+          meta: [`⏱ ${nextMission.estimated_minutes} min`, `💎 ${nextMission.xp_reward} XP`],
+          icon: nextMission.icon,
+        }
+      : null
   const recommendedPathTitle = (paths || []).find((path) => path.slug === recommendedPath)?.title ?? 'Fondamenti di Sistemi'
   const stageSummaries = (['foundation', 'builder', 'inventor', 'architect'] as const)
     .map((stage) => {
@@ -132,7 +260,8 @@ export default async function DashboardPage() {
             <div className="mt-5 flex flex-wrap gap-2">
               <span className="hud-chip"><span className="font-mono text-primary-light">LVL</span> {xp.level}</span>
               <span className="hud-chip"><span className="font-mono text-primary-light">PERCORSO</span> {recommendedPathTitle}</span>
-              <span className="hud-chip"><span className="font-mono text-primary-light">REVIEW</span> {dueReviewCount} in scadenza</span>
+              <Link href="/review" className="hud-chip hover:border-primary/40 transition-colors"><span className="font-mono text-primary-light">RIPASSO</span> {dueReviewCount} in scadenza</Link>
+              <span className="hud-chip"><span className="font-mono text-primary-light">TOPIC</span> {understoodTopicCount} compresi</span>
             </div>
           </div>
           <Link href="/profile" className="self-start lg:self-auto">
@@ -151,6 +280,10 @@ export default async function DashboardPage() {
             { label: 'Serie attuale', value: `${profile.streak}d`, icon: '02' },
             { label: 'XP totali', value: profile.xp >= 1000 ? `${(profile.xp / 1000).toFixed(1)}k` : profile.xp, icon: '03' },
             { label: 'Review in scadenza', value: dueReviewCount, icon: '04' },
+            { label: 'Topic in studio', value: studyingTopicCount, icon: '05' },
+            { label: 'Topic compresi', value: understoodTopicCount, icon: '06' },
+            { label: 'Copertura studio', value: `${topicCoveragePct}%`, icon: '07' },
+            { label: 'Area più forte', value: bestAreaCoverage ? `${bestAreaCoverage.pct}%` : '0%', icon: '08' },
           ].map((item) => (
             <div key={item.label} className="panel rounded-[1.4rem] p-4">
               <div className="font-mono text-xs text-primary-light">{item.icon}</div>
@@ -207,20 +340,26 @@ export default async function DashboardPage() {
           </Link>
         )}
 
-        {nextMission && !isDailyNextMission && (
-          <Link href={`/mission/${nextMission.id}`} className="block">
+        {nextBestAction && (!isDailyNextMission || nextBestAction.kind === 'topic') && (
+          <Link href={nextBestAction.href} className="block">
             <div className="panel rounded-[1.9rem] p-5 transition-all hover:-translate-y-0.5">
               <div className="eyebrow text-[10px] text-primary-light">Next Best Action</div>
               <div className="mt-4 flex items-start gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-primary/10 text-3xl text-primary-light">
-                  {nextMission.icon}
+                  {nextBestAction.icon}
                 </div>
                 <div className="flex-1">
-                  <div className="text-xl font-semibold text-white">{nextMission.title}</div>
-                  <div className="mt-2 text-sm leading-7 text-muted">{nextMission.description}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-xl font-semibold text-white">{nextBestAction.title}</div>
+                    <span className="rounded-full border border-[#2dd4bf]/25 bg-[#2dd4bf]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#81f4e1]">
+                      {nextBestAction.badge}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm leading-7 text-muted">{nextBestAction.description}</div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="hud-chip">⏱ {nextMission.estimated_minutes} min</span>
-                    <span className="hud-chip">💎 {nextMission.xp_reward} XP</span>
+                    {nextBestAction.meta.map((item) => (
+                      <span key={item} className="hud-chip">{item}</span>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -318,6 +457,86 @@ export default async function DashboardPage() {
                   </Link>
                 )
               })}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <div className="mb-4">
+          <div className="eyebrow text-[10px] text-primary-light">Study Graph</div>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">Knowledge base operativa</h2>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="panel rounded-[1.8rem] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow text-[10px] text-warning">Da iniziare</div>
+                <div className="mt-2 text-lg font-semibold text-white">Prossimi topic</div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                {topicsToStart.length}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {topicsToStart.length > 0 ? topicsToStart.map((topic) => (
+                <Link key={topic.slug} href={`/topic/${topic.slug}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-colors hover:border-white/20">
+                  <div className="text-sm font-semibold text-white">{topic.title}</div>
+                  <div className="mt-1 text-xs leading-6 text-slate-400">{topic.summary}</div>
+                </Link>
+              )) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-400">
+                  Hai già avviato tutti i topic disponibili.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="panel rounded-[1.8rem] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow text-[10px] text-primary-light">In studio</div>
+                <div className="mt-2 text-lg font-semibold text-white">Topic attivi</div>
+              </div>
+              <div className="rounded-full border border-[#2dd4bf]/25 bg-[#2dd4bf]/10 px-3 py-1 text-xs text-[#81f4e1]">
+                {studyingTopicCount}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {topicsStudying.length > 0 ? topicsStudying.map((topic) => (
+                <Link key={topic.slug} href={`/topic/${topic.slug}`} className="rounded-2xl border border-[#2dd4bf]/20 bg-[#2dd4bf]/8 px-4 py-3 transition-colors hover:border-[#2dd4bf]/30">
+                  <div className="text-sm font-semibold text-white">{topic.title}</div>
+                  <div className="mt-1 text-xs leading-6 text-slate-400">{topic.estimated_minutes} min · Deep study attivo</div>
+                </Link>
+              )) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-400">
+                  Nessun topic segnato come in studio.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="panel rounded-[1.8rem] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow text-[10px] text-primary-light">Compresi</div>
+                <div className="mt-2 text-lg font-semibold text-white">Consolidati di recente</div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                {understoodTopicCount}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {recentlyUnderstood.length > 0 ? recentlyUnderstood.map((topic) => (
+                <Link key={topic.slug} href={`/topic/${topic.slug}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition-colors hover:border-white/20">
+                  <div className="text-sm font-semibold text-white">{topic.title}</div>
+                  <div className="mt-1 text-xs leading-6 text-slate-400">Takeaways: {topic.key_takeaways.length}</div>
+                </Link>
+              )) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-400">
+                  Nessun topic ancora marcato come compreso.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>

@@ -55,6 +55,11 @@ export type StepReference = {
   source?: string
 }
 
+export type TopicStudyBlock = {
+  title: string
+  content: string
+}
+
 export type StepVisual = {
   kind:
     | 'feedback-loop'
@@ -195,6 +200,55 @@ export type Mission = {
   steps: MissionStep[]
   created_at: string
 }
+
+export type Topic = {
+  slug: string
+  title: string
+  summary: string
+  difficulty_level: 'core' | 'deep' | 'architect'
+  estimated_minutes: number
+  overview: string
+  key_takeaways: string[]
+  study_blocks?: TopicStudyBlock[] | null
+  formulas?: StepFormula[] | null
+  references?: StepReference[] | null
+  visuals?: StepVisual[] | null
+  created_at: string
+}
+
+export type MissionTopic = {
+  mission_id: string
+  topic_slug: string
+  sort_order: number
+  is_primary: boolean
+}
+
+export type TopicPrerequisite = {
+  topic_slug: string
+  prerequisite_topic_slug: string
+  sort_order: number
+}
+
+export type UserTopicStatus = 'not_started' | 'studying' | 'understood'
+
+export type UserTopicProgress = {
+  user_id: string
+  topic_slug: string
+  status: UserTopicStatus
+  started_at: string | null
+  completed_at: string | null
+  updated_at: string
+}
+
+export type MissionTopicLink = {
+  topic: Topic
+  sort_order: number
+  is_primary: boolean
+  prerequisites?: Topic[]
+  status?: UserTopicStatus
+}
+
+export type MissionReadiness = 'ready' | 'stretch' | 'study-first'
 
 export type MissionStatus = 'not_started' | 'in_progress' | 'completed'
 

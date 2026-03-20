@@ -9,7 +9,7 @@ import {
 } from '@/lib/profile-preferences'
 import { levelFromXp } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
-import type { Achievement, MissionStep } from '@/types'
+import type { Achievement, MissionStep, UserTopicStatus } from '@/types'
 
 export type CompleteMissionResult =
   | { error: string }
@@ -60,10 +60,16 @@ export async function completeMission(
   }
 
   const steps = mission.steps as MissionStep[]
-  const gradedSteps = steps.filter((step) => step.type !== 'lesson') as Array<{ correct: number }>
+  const gradedSteps = steps.filter((step) => step.type !== 'lesson')
   const maxScore = gradedSteps.length
-  const score = gradedSteps.reduce((total: number, step: { correct: number }, index: number) => {
-    return total + (answers[index] === step.correct ? 1 : 0)
+  const score = gradedSteps.reduce((total: number, step: MissionStep, index: number) => {
+    if (step.type === 'sorting') {
+      return total + (answers[index] === 0 ? 1 : 0)
+    }
+    if ('correct' in step) {
+      return total + (answers[index] === step.correct ? 1 : 0)
+    }
+    return total
   }, 0)
 
   // XP multiplier from streak: +10% per 3 streak days, capped at +50%
@@ -323,5 +329,30 @@ export async function updateProfile(data: {
   revalidatePath('/profile')
   revalidatePath('/onboarding')
 
+  return { success: true }
+}
+
+export async function updateTopicStatus(topicSlug: string, status: UserTopicStatus) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const now = new Date().toISOString()
+  const payload = {
+    user_id: user.id,
+    topic_slug: topicSlug,
+    status,
+    started_at: status === 'not_started' ? null : now,
+    completed_at: status === 'understood' ? now : null,
+  }
+
+  const { error } = await supabase
+    .from('user_topic_progress')
+    .upsert(payload, { onConflict: 'user_id,topic_slug' })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/topic/${topicSlug}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }

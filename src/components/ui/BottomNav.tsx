@@ -1,26 +1,27 @@
 import Link from 'next/link'
 
 interface Props {
-  active: string
+  active?: string
   learnPath?: string
 }
 
 export default function BottomNav({ active, learnPath = 'systems-foundations' }: Props) {
+  const current = active ?? ''
   const navItems = [
-    { href: '/dashboard', icon: '⌂', label: 'Base' },
-    { href: `/path/${learnPath}`, icon: '◎', label: 'Roadmap' },
-    { href: '/leaderboard', icon: '△', label: 'Rank' },
-    { href: '/profile', icon: '◌', label: 'Dossier' },
-    { href: '/settings', icon: '⋯', label: 'Assetto' },
+    { href: '/dashboard',        icon: '⌂', label: 'Base' },
+    { href: `/path/${learnPath}`,icon: '◎', label: 'Roadmap' },
+    { href: '/review',           icon: '↺', label: 'Ripasso' },
+    { href: '/leaderboard',      icon: '△', label: 'Rank' },
+    { href: '/profile',          icon: '◌', label: 'Dossier' },
   ]
 
   return (
     <nav className="touch-pan-y fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1rem)] max-w-xl -translate-x-1/2 items-center justify-around rounded-[1.75rem] border border-rim/70 bg-[#091423]/86 px-1.5 py-2 shadow-[0_24px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:bottom-4 sm:w-[calc(100%-1.5rem)] sm:px-2 sm:py-2.5">
       {navItems.map((item) => {
         const isActive =
-          active === item.href ||
-          (active.startsWith('/path/') && item.href.startsWith('/path/')) ||
-          active === item.label.toLowerCase()
+          current === item.href ||
+          (current.startsWith('/path/') && item.href.startsWith('/path/')) ||
+          current === item.label.toLowerCase()
         return (
           <Link
             key={item.href}

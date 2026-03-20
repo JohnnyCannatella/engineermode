@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import type { MissionPrerequisite, UserMissionProgress } from '@/types'
+import type { MissionPrerequisite, UserMissionProgress, UserTopicStatus } from '@/types'
 import BottomNav from '@/components/ui/BottomNav'
 
 const STAGE_LABELS = {
@@ -36,9 +36,24 @@ export default async function PathPage(props: PageProps<'/path/[slug]'>) {
 
   const progressMap = new Map<string, UserMissionProgress>((progress || []).map((p) => [p.mission_id, p]))
   const missionIds = (missions || []).map((mission) => mission.id)
-  const { data: prerequisiteRows } = missionIds.length > 0
-    ? await supabase.from('mission_prerequisites').select('mission_id, prerequisite_mission_id').in('mission_id', missionIds)
-    : { data: [] as MissionPrerequisite[] }
+  const [{ data: prerequisiteRows }, { data: missionTopicRows }] = await Promise.all([
+    missionIds.length > 0
+      ? supabase.from('mission_prerequisites').select('mission_id, prerequisite_mission_id').in('mission_id', missionIds)
+      : Promise.resolve({ data: [] as MissionPrerequisite[] }),
+    missionIds.length > 0
+      ? supabase.from('mission_topics').select('mission_id,topic_slug,is_primary,sort_order').in('mission_id', missionIds)
+      : Promise.resolve({ data: [] as { mission_id: string; topic_slug: string; is_primary: boolean; sort_order: number }[] }),
+  ])
+
+  const missionTopicSlugs = Array.from(new Set((missionTopicRows || []).map((row) => row.topic_slug)))
+  const [{ data: topicPrerequisiteRows }, { data: topicProgressRows }] = await Promise.all([
+    missionTopicSlugs.length > 0
+      ? supabase.from('topic_prerequisites').select('topic_slug,prerequisite_topic_slug,sort_order').in('topic_slug', missionTopicSlugs)
+      : Promise.resolve({ data: [] as { topic_slug: string; prerequisite_topic_slug: string; sort_order: number }[] }),
+    missionTopicSlugs.length > 0
+      ? supabase.from('user_topic_progress').select('topic_slug,status').eq('user_id', user.id).in('topic_slug', missionTopicSlugs)
+      : Promise.resolve({ data: [] as { topic_slug: string; status: UserTopicStatus }[] }),
+  ])
 
   const prerequisiteMap = new Map<string, string[]>()
   for (const row of (prerequisiteRows || []) as MissionPrerequisite[]) {
@@ -46,6 +61,19 @@ export default async function PathPage(props: PageProps<'/path/[slug]'>) {
     existing.push(row.prerequisite_mission_id)
     prerequisiteMap.set(row.mission_id, existing)
   }
+  const topicsByMission = new Map<string, { topic_slug: string; is_primary: boolean; sort_order: number }[]>()
+  for (const row of missionTopicRows || []) {
+    const existing = topicsByMission.get(row.mission_id) ?? []
+    existing.push(row)
+    topicsByMission.set(row.mission_id, existing)
+  }
+  const topicPrerequisitesByTopic = new Map<string, string[]>()
+  for (const row of topicPrerequisiteRows || []) {
+    const existing = topicPrerequisitesByTopic.get(row.topic_slug) ?? []
+    existing.push(row.prerequisite_topic_slug)
+    topicPrerequisitesByTopic.set(row.topic_slug, existing)
+  }
+  const topicStatusMap = new Map<string, UserTopicStatus>((topicProgressRows || []).map((row) => [row.topic_slug, row.status]))
 
   const completed = (missions || []).filter((m) => progressMap.get(m.id)?.status === 'completed').length
   const totalXp = (missions || []).reduce((sum, mission) => sum + (progressMap.get(mission.id)?.xp_earned ?? 0), 0)
@@ -149,6 +177,27 @@ export default async function PathPage(props: PageProps<'/path/[slug]'>) {
             const sequentialFallback = index > 0 ? [(missions || [])[index - 1]?.id].filter(Boolean) as string[] : []
             const requiredMissionIds = prerequisites.length > 0 ? prerequisites : sequentialFallback
             const isLocked = !isCompleted && requiredMissionIds.some((requiredId) => progressMap.get(requiredId)?.status !== 'completed')
+            const missionTopics = (topicsByMission.get(mission.id) ?? []).sort((a, b) => {
+              if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1
+              return a.sort_order - b.sort_order
+            })
+            const hasMissingTopicPrerequisite = missionTopics.some((topic) =>
+              (topicPrerequisitesByTopic.get(topic.topic_slug) ?? []).some((slug) => topicStatusMap.get(slug) !== 'understood')
+            )
+            const hasStudyingTopic = missionTopics.some((topic) => topicStatusMap.get(topic.topic_slug) === 'studying')
+            const hasUnderstoodPrimary = missionTopics.some((topic) => topic.is_primary && topicStatusMap.get(topic.topic_slug) === 'understood')
+            const readiness = hasMissingTopicPrerequisite
+              ? 'study-first'
+              : hasUnderstoodPrimary
+              ? 'ready'
+              : hasStudyingTopic
+              ? 'stretch'
+              : 'study-first'
+            const readinessMeta = readiness === 'ready'
+              ? { label: 'Pronta', tone: 'border-[#2dd4bf]/25 bg-[#2dd4bf]/10 text-[#81f4e1]' }
+              : readiness === 'stretch'
+              ? { label: 'Stretch', tone: 'border-[#f6a63b]/25 bg-[#f6a63b]/10 text-[#f8c777]' }
+              : { label: 'Studia prima', tone: 'border-[#f472b6]/25 bg-[#f472b6]/10 text-[#f9a8d4]' }
 
             return (
               <Link key={mission.id} href={isLocked ? '#' : `/mission/${mission.id}`} className={isLocked ? 'pointer-events-none' : ''}>
@@ -171,6 +220,11 @@ export default async function PathPage(props: PageProps<'/path/[slug]'>) {
                         {mission.difficulty_level && (
                           <span className="rounded-full border border-rim/70 bg-bg/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/75">
                             {mission.difficulty_level}
+                          </span>
+                        )}
+                        {!isLocked && !isCompleted && missionTopics.length > 0 && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${readinessMeta.tone}`}>
+                            {readinessMeta.label}
                           </span>
                         )}
                         {isCompleted && (missionProgress?.max_score ?? 0) > 0 && (

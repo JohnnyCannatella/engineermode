@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Mission, UserMissionProgress, Achievement } from '@/types'
+import type { Mission, UserMissionProgress, Achievement, MissionReadiness, MissionTopicLink } from '@/types'
 import { completeMission, type CompleteMissionResult } from '@/app/actions'
 import LessonStepView from './LessonStep'
 import QuizStepView from './QuizStep'
@@ -15,9 +15,12 @@ import DiagramTapStepView from './DiagramTapStep'
 import Confetti from './Confetti'
 import LevelUpModal from './LevelUpModal'
 import Toast, { type ToastItem } from '@/components/ui/Toast'
+import MissionTopicsPanel from './MissionTopicsPanel'
 
 interface Props {
   mission: Mission
+  topics?: MissionTopicLink[]
+  readiness?: MissionReadiness
   alreadyCompleted: boolean
   pathSlug: string
   previousProgress?: UserMissionProgress | null
@@ -41,7 +44,7 @@ type CompletionData = {
   newAchievements: Achievement[]
 }
 
-export default function MissionPlayer({ mission, alreadyCompleted, pathSlug, previousProgress, isDaily }: Props) {
+export default function MissionPlayer({ mission, topics = [], readiness = 'ready', alreadyCompleted, pathSlug, previousProgress, isDaily }: Props) {
   const [currentStep, setCurrentStep] = useState(0)
   const [stepStates, setStepStates] = useState<StepState[]>(
     mission.steps.map(() => ({ selected: null, checked: false, sortedOrder: [] }))
@@ -74,6 +77,23 @@ export default function MissionPlayer({ mission, alreadyCompleted, pathSlug, pre
   }
 
   const currentMeta = stepTypeMeta[step.type] ?? stepTypeMeta['lesson']
+  const readinessMeta: Record<MissionReadiness, { label: string; tone: string; message: string }> = {
+    ready: {
+      label: 'Pronta',
+      tone: 'border-[#2dd4bf]/20 bg-[#2dd4bf]/10 text-[#81f4e1]',
+      message: 'Hai già base sufficiente sui topic collegati. Questa missione è nel tuo range operativo.',
+    },
+    stretch: {
+      label: 'Stretch',
+      tone: 'border-[#f6a63b]/20 bg-[#f6a63b]/10 text-[#f8c777]',
+      message: 'Hai iniziato la teoria, ma qui stai salendo di difficoltà. Ha senso provarla se vuoi consolidare ragionando.',
+    },
+    'study-first': {
+      label: 'Studia Prima',
+      tone: 'border-[#f472b6]/20 bg-[#f472b6]/10 text-[#f9a8d4]',
+      message: 'Qui conviene chiudere prima almeno un topic o un prerequisito, altrimenti rischi una comprensione troppo fragile.',
+    },
+  }
 
   // Score: count correct answers across all interactive steps
   const score = stepStates.filter((s, i) => {
@@ -320,8 +340,14 @@ export default function MissionPlayer({ mission, alreadyCompleted, pathSlug, pre
           <div className="mt-4 rounded-2xl border border-[#2dd4bf]/20 bg-[linear-gradient(135deg,rgba(45,212,191,0.1),rgba(16,24,40,0.08))] px-4 py-3 text-sm text-slate-300">
             Sistema di apprendimento: le risposte corrette aumentano la mastery e programmano il prossimo ripasso.
           </div>
+
+          <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${readinessMeta[readiness].tone}`}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em]">{readinessMeta[readiness].label}</div>
+            <div className="mt-2 leading-7">{readinessMeta[readiness].message}</div>
+          </div>
         </div>
         <div className="mt-5 grid gap-3 animate-fade-up" style={{ animationDelay: '120ms' }}>
+          <MissionTopicsPanel topics={topics} missionTitle={mission.title} />
           <button
             onClick={() => setPhase('playing')}
             className="w-full rounded-2xl border border-[#f6a63b]/40 bg-[linear-gradient(135deg,#f6a63b,#d97706)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.18em] text-slate-950 shadow-[0_18px_38px_rgba(245,158,11,0.22)]"
@@ -486,6 +512,12 @@ export default function MissionPlayer({ mission, alreadyCompleted, pathSlug, pre
                 })}
               </div>
             </div>
+          </section>
+        )}
+
+        {topics.length > 0 && (
+          <section className="mt-5 animate-fade-up" style={{ animationDelay: '340ms' }}>
+            <MissionTopicsPanel topics={topics} missionTitle={mission.title} />
           </section>
         )}
       </div>

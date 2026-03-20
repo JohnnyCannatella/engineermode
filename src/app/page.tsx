@@ -6,7 +6,7 @@ const features = [
   { icon: '◎', title: 'AI e Decisione', desc: 'Modelli, simulazione, stima, pianificazione e sistemi intelligenti credibili.' },
   { icon: '△', title: 'Energia e Controllo', desc: 'Potenza, attuatori, sensori e loop di controllo per macchine reali.' },
   { icon: '▣', title: 'Materiali e Prototipi', desc: 'Processi, tolleranze, DFM e iterazione rapida per costruire davvero.' },
-  { icon: '◇', title: 'Systems Architecture', desc: 'Budget, interfacce, verification e integrazione per pensare da chief engineer.' },
+  { icon: '◇', title: 'Architettura dei Sistemi', desc: 'Budget, interfacce, verification e integrazione per pensare da chief engineer.' },
 ]
 
 export default async function LandingPage() {
@@ -77,16 +77,16 @@ export default async function LandingPage() {
               <div className="mt-2 text-2xl font-semibold">Roadmap Stark</div>
             </div>
             <div className="rounded-2xl border border-rim/70 bg-bg/70 px-3 py-2 font-mono text-xs text-primary-light">
-              BUILD v1
+              FASE v1
             </div>
           </div>
           <div className="hud-divider my-5" />
           <div className="grid gap-3">
             {[
-              ['Foundation', 'Sistemi, segnali, energia, logica di base'],
-              ['Builder', 'Software, elettronica, meccanica, potenza'],
-              ['Inventor', 'Controllo, simulazione, AI, prototipazione'],
-              ['Architect', 'Integrazione completa di sottosistemi complessi'],
+              ['Fondamenta', 'Sistemi, segnali, energia, logica di base'],
+              ['Costruttore', 'Software, elettronica, meccanica, potenza'],
+              ['Inventore', 'Controllo, simulazione, AI, prototipazione'],
+              ['Architetto', 'Integrazione completa di sottosistemi complessi'],
             ].map(([title, desc], index) => (
               <div key={title} className="panel rounded-[1.4rem] px-4 py-4">
                 <div className="flex items-start gap-4">
