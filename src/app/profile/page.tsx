@@ -217,7 +217,12 @@ export default async function ProfilePage() {
       </section>
 
       <section className="mb-5">
-        <h2 className="eyebrow mb-3">Knowledge Graph</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="eyebrow">Knowledge Graph</h2>
+          <Link href="/topics" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-light hover:underline">
+            Biblioteca →
+          </Link>
+        </div>
         <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-300">Topic avviati</span>

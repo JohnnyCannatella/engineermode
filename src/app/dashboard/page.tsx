@@ -261,7 +261,7 @@ export default async function DashboardPage() {
               <span className="hud-chip"><span className="font-mono text-primary-light">LVL</span> {xp.level}</span>
               <span className="hud-chip"><span className="font-mono text-primary-light">PERCORSO</span> {recommendedPathTitle}</span>
               <Link href="/review" className="hud-chip hover:border-primary/40 transition-colors"><span className="font-mono text-primary-light">RIPASSO</span> {dueReviewCount} in scadenza</Link>
-              <span className="hud-chip"><span className="font-mono text-primary-light">TOPIC</span> {understoodTopicCount} compresi</span>
+              <Link href="/topics" className="hud-chip hover:border-primary/40 transition-colors"><span className="font-mono text-primary-light">TOPIC</span> {understoodTopicCount} compresi</Link>
             </div>
           </div>
           <Link href="/profile" className="self-start lg:self-auto">

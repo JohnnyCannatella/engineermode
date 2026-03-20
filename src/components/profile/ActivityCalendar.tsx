@@ -20,7 +20,7 @@ export default function ActivityCalendar({ completedDates }: Props) {
     weeks.push(days.slice(i * 7, i * 7 + 7))
   }
 
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+  const dayLabels = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
   return (
     <div className="flex flex-col gap-2">
@@ -47,8 +47,8 @@ export default function ActivityCalendar({ completedDates }: Props) {
         </div>
       ))}
       <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-muted">28 days ago</span>
-        <span className="text-[10px] text-muted">Today</span>
+        <span className="text-[10px] text-muted">28 giorni fa</span>
+        <span className="text-[10px] text-muted">Oggi</span>
       </div>
     </div>
   )
